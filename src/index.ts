@@ -1,72 +1,99 @@
 import { PrismaClient } from "@prisma/client";
-import * as bodyParser from "body-parser";
-import express from "express";
+
+import express, { Request, Response } from "express";
+import bodyParser from "body-parser";
+
+import jwt from "jsonwebtoken";
+
+require("dotenv").config();
 
 const prisma = new PrismaClient();
 const app = express();
 
+interface User {
+   id: number;
+   username: string;
+}
+
+interface AuthenticatedRequest extends express.Request {
+   decodedUser?: User;
+}
+
+const generateAccessToken = (user: User) => {
+   return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET as string, {
+      expiresIn: "7d",
+   });
+};
+
+const authenticator = (
+   req: AuthenticatedRequest,
+   res: express.Response,
+   next: express.NextFunction
+) => {
+   // If there is no token, the user is not allowed to access this route
+   const token = req.headers.authorization;
+   if (!token) return res.sendStatus(401);
+
+   // If there is a token, decrypt it and make sure it's valid.
+   jwt.verify(
+      token,
+      process.env.ACCESS_TOKEN_SECRET as string,
+      (error: any, decodedToken: any) => {
+         // There is an error while decoding object, stop process
+         if (error) return res.sendStatus(403);
+
+         // Convert the decoded token to user object and store it in the request
+         const user = decodedToken as User;
+         req.decodedUser = user;
+
+         // User token is decoded, the function after this middleware can be executed
+         next();
+      }
+   );
+};
+
 app.use(bodyParser.json());
 
-app.post(`/resources`, async (req, res) => {
-   const result = await prisma.resource.create({
-      data: {
-         ...req.body,
-      },
-   });
-   res.json(result);
+app.get("/api/users", authenticator, async (req: AuthenticatedRequest, res) => {
+   console.log(req.decodedUser);
+   const users = await prisma.user.findMany();
+   res.status(200).json(users);
 });
 
-app.post(`/projects`, async (req, res) => {
-   const result = await prisma.project.create({
-      data: {
-         ...req.body,
-      },
-   });
-   res.json(result);
-});
-
-app.post(`/projects/:id/tasks`, async (req, res) => {
-   const { id } = req.params;
-   const result = await prisma.task.create({
-      data: {
-         ...req.body,
-         project: {
-            connect: { id: Number(id) },
-         },
-      },
-   });
-   res.json(result);
-});
-
-app.delete(`/project/:id`, async (req, res) => {
-   const { id } = req.params;
-   const result = await prisma.project.delete({
+app.post("/api/login", async (req, res) => {
+   // Search for the user in our database
+   const user = await prisma.user.findOne({
       where: {
-         id: Number(id),
+         username: req.body.username,
       },
    });
-   res.status(200).json(result);
-});
 
-app.get(`/projects/:id`, async (req, res) => {
-   const { id } = req.params;
-   const project = await prisma.project.findOne({
-      where: {
-         id: Number(id),
-      },
-      include: { resources: true, tasks: true },
+   // If there is no user found, send 404 error
+   if (!user) return res.status(404).json("Username not found");
+
+   // If the user password does not match, send error
+   if (user.password !== req.body.password)
+      return res.status(400).json("Invalid password");
+
+   // If user exists and passwords match, generate token
+   const token = generateAccessToken({
+      id: user.id,
+      username: user.username,
    });
-   res.status(200).json(project);
+
+   // After the token is generated, send it so the user can store it
+   return res.json(token);
 });
 
-app.get("/projects", async (req, res) => {
-   const projects = await prisma.project.findMany();
-   res.status(200).json(projects);
-});
-
-app.get("/resources", async (req, res) => {
-   const resources = await prisma.resource.findMany();
-   res.status(200).json(resources);
+app.post("/api/register", async (req, res) => {
+   // Not hashing passwords here because this is just for token practice
+   const newUser = await prisma.user.create({
+      data: {
+         username: req.body.username,
+         password: req.body.password,
+      },
+   });
+   res.status(201).json({ message: `User (${newUser.username}) created.` });
 });
 
 const server = app.listen(5000, () =>

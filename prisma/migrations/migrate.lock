@@ -3,7 +3,4 @@
 # Prisma Migrate lockfile v1
 # Read more about conflict resolution here: TODO
 
-20200417130453-init
-20200417130937-small-changes
-20200417141516-removed-resource-to-project-relation
-20200417141920-added-relation-back
+20200422142648-init
