@@ -5,26 +5,33 @@ import bodyParser from "body-parser";
 
 import jwt from "jsonwebtoken";
 
+// Load our .env file
 require("dotenv").config();
 
+// Create a prisma client to deal with our database
 const prisma = new PrismaClient();
+// Create an express client to deal with http requests
 const app = express();
 
+// User interface without sensitive information
 interface User {
    id: number;
    username: string;
 }
 
+// Extend the express library request to include a decoded user
 interface AuthenticatedRequest extends express.Request {
    decodedUser?: User;
 }
 
+// Generate a token that will expire in 7 days for user access
 const generateAccessToken = (user: User) => {
    return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET as string, {
       expiresIn: "7d",
    });
 };
 
+// Authenticator middleware that makes sure the user has a valid token
 const authenticator = (
    req: AuthenticatedRequest,
    res: express.Response,
@@ -52,14 +59,17 @@ const authenticator = (
    );
 };
 
+// All requests will have a JSON body, so we have to parse it
 app.use(bodyParser.json());
 
+// Route for fetching all users in the database
 app.get("/api/users", authenticator, async (req: AuthenticatedRequest, res) => {
    console.log(req.decodedUser);
    const users = await prisma.user.findMany();
    res.status(200).json(users);
 });
 
+// Login route
 app.post("/api/login", async (req, res) => {
    // Search for the user in our database
    const user = await prisma.user.findOne({
@@ -70,11 +80,9 @@ app.post("/api/login", async (req, res) => {
 
    // If there is no user found, send 404 error
    if (!user) return res.status(404).json("Username not found");
-
    // If the user password does not match, send error
    if (user.password !== req.body.password)
       return res.status(400).json("Invalid password");
-
    // If user exists and passwords match, generate token
    const token = generateAccessToken({
       id: user.id,
@@ -85,6 +93,7 @@ app.post("/api/login", async (req, res) => {
    return res.json(token);
 });
 
+// Register route
 app.post("/api/register", async (req, res) => {
    // Not hashing passwords here because this is just for token practice
    const newUser = await prisma.user.create({
