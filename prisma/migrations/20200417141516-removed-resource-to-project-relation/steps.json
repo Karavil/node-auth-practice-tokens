@@ -1,0 +1,21 @@
+{
+  "version": "0.3.14-fixed",
+  "steps": [
+    {
+      "tag": "DeleteDirective",
+      "location": {
+        "path": {
+          "tag": "Field",
+          "model": "Project",
+          "field": "resources"
+        },
+        "directive": "relation"
+      }
+    },
+    {
+      "tag": "DeleteField",
+      "model": "Resource",
+      "field": "projects"
+    }
+  ]
+}
